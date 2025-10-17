@@ -13,22 +13,11 @@
 	<version>0.0.1-SNAPSHOT</version>
 	<name>user-service</name>
 	<description>Microsserviço responsável pelo cadastro e gerenciamento de usuários (moradores e funcionários), armazenando informações de contato e apartamento, e fornecendo APIs para gerenciamento de perfis.</description>
-	<url/>
-	<licenses>
-		<license/>
-	</licenses>
-	<developers>
-		<developer/>
-	</developers>
-	<scm>
-		<connection/>
-		<developerConnection/>
-		<tag/>
-		<url/>
-	</scm>
+
 	<properties>
 		<java.version>21</java.version>
 	</properties>
+
 	<dependencies>
 		<dependency>
 			<groupId>org.springframework.boot</groupId>
