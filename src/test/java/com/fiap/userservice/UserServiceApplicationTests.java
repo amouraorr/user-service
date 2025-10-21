@@ -1,4 +1,4 @@
-package com.alex.user_service;
+package com.fiap.userservice;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
