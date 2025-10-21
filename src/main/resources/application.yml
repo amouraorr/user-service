@@ -1,0 +1,45 @@
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5432/usersdb
+    username: userservice
+    password: password
+  jpa:
+    hibernate:
+      ddl-auto: none
+    properties:
+      hibernate:
+        format_sql: true
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+
+kafka:
+  bootstrap-servers: localhost:9092
+  topic:
+    users: users.events
+
+jwt:
+  secret: a-very-secret-key-for-local
+  expiration-ms: 3600000
+
+logging:
+  level:
+    root: INFO
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+
+---
+spring:
+  profiles: docker
+  datasource:
+    url: ${SPRING_DATASOURCE_URL}
+    username: ${SPRING_DATASOURCE_USERNAME}
+    password: ${SPRING_DATASOURCE_PASSWORD}
+kafka:
+  bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS}
+jwt:
+  secret: ${JWT_SECRET}
