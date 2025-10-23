@@ -1,4 +1,4 @@
-package com.fiap.userservice.infrastructure.security;
+package com.fiap.userservice.infrastructure.config.security;
 
 import io.jsonwebtoken.*;
 import io.jsonwebtoken.security.Keys;

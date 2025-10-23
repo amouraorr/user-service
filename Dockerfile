@@ -1,11 +1,17 @@
 FROM maven:3.9.6-eclipse-temurin-17 AS build
 WORKDIR /workspace
-COPY . .
-RUN mvn -pl user-service -am -DskipTests package
 
-FROM eclipse-temurin:21-jre-alpine
-WORKDIR /app
-COPY --from=build /workspace/user-service/target/*.jar app.jar
+COPY . /workspace
+
+RUN mvn -B -DskipTests -pl user-service -am package
+
+RUN mkdir -p /workspace && cp user-service/target/*.jar /workspace/app.jar
+
+FROM eclipse-temurin:17-jre-jammy
+WORKDIR /
+
+COPY --from=build /workspace/app.jar app.jar
+
 EXPOSE 8080
-ENV JAVA_OPTS=""
-ENTRYPOINT ["sh", "-c", "java $JAVA_OPTS -jar /app/app.jar"]
+
+ENTRYPOINT ["java", "-jar", "/app.jar"]
