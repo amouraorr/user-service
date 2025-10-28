@@ -1,38 +1,70 @@
 package com.fiap.userservice.application.usecase;
 
+import com.fiap.userservice.application.security.AppPasswordEncoder;
 import com.fiap.userservice.domain.model.User;
 import com.fiap.userservice.domain.repository.UserRepository;
 import com.fiap.userservice.infrastructure.messaging.UserEventProducer;
-import com.fiap.userservice.application.security.AppPasswordEncoder;
 import org.springframework.stereotype.Service;
 
 import java.time.OffsetDateTime;
+import java.util.Optional;
 import java.util.UUID;
 
-/**
- * Caso de uso para atualizar dados do usuário (requer autenticação).
- */
 @Service
 public class UpdateUserUseCase {
 
     private final UserRepository repository;
     private final AppPasswordEncoder appPasswordEncoder;
-    private final UserEventProducer eventProducer;
+    private final Optional<UserEventProducer> eventProducer;
 
-    public UpdateUserUseCase(UserRepository repository, AppPasswordEncoder appPasswordEncoder, UserEventProducer eventProducer) {
+    public UpdateUserUseCase(UserRepository repository,
+                             AppPasswordEncoder appPasswordEncoder,
+                             Optional<UserEventProducer> eventProducer) {
         this.repository = repository;
         this.appPasswordEncoder = appPasswordEncoder;
         this.eventProducer = eventProducer;
     }
 
-    public User execute(UUID id, String phone, String apartment, String rawPassword) {
-        User user = repository.findById(id).orElseThrow(() -> new IllegalArgumentException("user not found"));
-        if (phone != null) user.setPhone(phone);
-        if (apartment != null) user.setApartment(apartment);
-        if (rawPassword != null) user.setPassword(appPasswordEncoder.encode(rawPassword));
+    /**
+     * Atualiza um usuário encontrado pelo id. Campos nulos são ignorados (não atualizados).
+     */
+    public User execute(UUID id,
+                        String username,
+                        String rawPassword,
+                        String phone,
+                        String apartment,
+                        String role) {
+        User user = repository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("user not found"));
+
+        if (username != null && !username.trim().isEmpty()) {
+            user.setUsername(username);
+        }
+
+        if (rawPassword != null && !rawPassword.trim().isEmpty()) {
+            String hashed = appPasswordEncoder.encode(rawPassword);
+            user.setPassword(hashed);
+        }
+
+        if (phone != null) {
+            user.setPhone(phone);
+        }
+
+        if (apartment != null) {
+            user.setApartment(apartment);
+        }
+
+        if (role != null) {
+            user.setRole(role);
+        }
+
         user.setUpdatedAt(OffsetDateTime.now());
-        User updated = repository.update(user);
-        eventProducer.sendUserUpdatedEvent(updated);
-        return updated;
+
+        User saved = repository.save(user);
+
+        // envia evento apenas se o produtor estiver disponível
+        eventProducer.ifPresent(ep -> ep.sendUserUpdatedEvent(saved));
+
+        return saved;
     }
 }
