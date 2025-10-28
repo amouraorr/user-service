@@ -11,18 +11,18 @@ import java.util.Optional;
 import java.util.UUID;
 
 /**
- * Caso de uso para registrar usuário (porta de aplicação).
+ * Caso de uso para registrar usuário (porta de aplicação)
  */
 @Service
 public class RegisterUserUseCase {
 
     private final UserRepository repository;
     private final AppPasswordEncoder appPasswordEncoder;
-    private final UserEventProducer eventProducer;
+    private final Optional<UserEventProducer> eventProducer;
 
     public RegisterUserUseCase(UserRepository repository,
                                AppPasswordEncoder appPasswordEncoder,
-                               UserEventProducer eventProducer) {
+                               Optional<UserEventProducer> eventProducer) {
         this.repository = repository;
         this.appPasswordEncoder = appPasswordEncoder;
         this.eventProducer = eventProducer;
@@ -48,8 +48,8 @@ public class RegisterUserUseCase {
         );
 
         User saved = repository.save(user);
-        // envia evento para demais interessados (ex.: audit/reporting, notification)
-        eventProducer.sendUserCreatedEvent(saved);
+        // envia evento apenas se o produtor estiver disponível
+        eventProducer.ifPresent(ep -> ep.sendUserCreatedEvent(saved));
         return saved;
     }
 }

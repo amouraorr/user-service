@@ -2,6 +2,8 @@ package com.fiap.userservice.infrastructure.messaging;
 
 import com.fiap.userservice.domain.model.User;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Component;
 
@@ -12,6 +14,8 @@ import java.util.Map;
  * Simples produtor Kafka que envia eventos de usuário.
  */
 @Component
+@ConditionalOnBean(KafkaTemplate.class)
+@ConditionalOnProperty(name = "kafka.topic.users")
 public class UserEventProducer {
 
     private final KafkaTemplate<String, Object> kafkaTemplate;

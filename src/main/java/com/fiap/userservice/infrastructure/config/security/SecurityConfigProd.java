@@ -1,4 +1,4 @@
-package com.fiap.userservice.infrastructure.config.security.security;
+package com.fiap.userservice.infrastructure.config.security;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
