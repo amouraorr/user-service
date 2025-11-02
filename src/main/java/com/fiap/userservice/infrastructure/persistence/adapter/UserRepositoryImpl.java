@@ -4,7 +4,7 @@ import com.fiap.userservice.domain.model.User;
 import com.fiap.userservice.domain.repository.UserRepository;
 import com.fiap.userservice.infrastructure.persistence.entity.UserEntity;
 import com.fiap.userservice.infrastructure.persistence.mapper.UserEntityMapper;
-import org.springframework.stereotype.Component;
+import org.springframework.stereotype.Repository;
 
 import java.time.OffsetDateTime;
 import java.util.Optional;
@@ -13,7 +13,7 @@ import java.util.UUID;
 /**
  * Implementação do adaptador de persistência (porta -> adaptador).
  */
-@Component
+@Repository
 public class UserRepositoryImpl implements UserRepository {
 
     private final JpaUserEntityRepository jpaRepo;
