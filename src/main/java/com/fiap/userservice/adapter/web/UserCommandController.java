@@ -6,6 +6,8 @@ import com.fiap.userservice.application.mapper.UserMapper;
 import com.fiap.userservice.application.usecase.RegisterUserUseCase;
 import com.fiap.userservice.domain.model.User;
 import jakarta.validation.Valid;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -15,6 +17,7 @@ import java.net.URI;
 /**
  * Endpoints para criação/atualização de usuários.
  */
+@Tag(name = "User", description = "Endpoints para criação e atualização de usuários (uso interno)")
 @RestController
 @RequestMapping("/api/internal/users")
 public class UserCommandController {
@@ -30,6 +33,7 @@ public class UserCommandController {
     /**
      * Cria um Morador (role = "MORADOR").
      */
+    @Operation(summary = "Criar Morador", description = "Cria um usuário com role = MORADOR")
     @PostMapping("/morador")
     public ResponseEntity<?> createMorador(@Valid @RequestBody CreateUserRequest request) {
         try {
@@ -58,6 +62,7 @@ public class UserCommandController {
      * Cria um Porteiro (role = "PORTEIRO").
      * apartment pode ser nulo/omisso.
      */
+    @Operation(summary = "Criar Porteiro", description = "Cria um usuário com role = PORTEIRO (apartment opcional)")
     @PostMapping("/porteiro")
     public ResponseEntity<?> createPorteiro(@Valid @RequestBody CreateUserRequest request) {
         try {

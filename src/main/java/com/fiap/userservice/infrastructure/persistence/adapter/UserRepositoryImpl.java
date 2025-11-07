@@ -6,13 +6,11 @@ import com.fiap.userservice.infrastructure.persistence.entity.UserEntity;
 import com.fiap.userservice.infrastructure.persistence.mapper.UserEntityMapper;
 import org.springframework.stereotype.Repository;
 
-import java.time.OffsetDateTime;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
-/**
- * Implementação do adaptador de persistência (porta -> adaptador).
- */
 @Repository
 public class UserRepositoryImpl implements UserRepository {
 
@@ -44,8 +42,21 @@ public class UserRepositoryImpl implements UserRepository {
     @Override
     public User update(User user) {
         UserEntity entity = mapper.toEntity(user);
-        entity.setUpdatedAt(OffsetDateTime.now());
         UserEntity saved = jpaRepo.save(entity);
         return mapper.toDomain(saved);
+    }
+
+    @Override
+    public List<User> findAll() {
+        return jpaRepo.findAll().stream()
+                .map(mapper::toDomain)
+                .collect(Collectors.toList());
+    }
+
+    @Override
+    public List<User> findAllByRole(String role) {
+        return jpaRepo.findAllByRole(role).stream()
+                .map(mapper::toDomain)
+                .collect(Collectors.toList());
     }
 }
