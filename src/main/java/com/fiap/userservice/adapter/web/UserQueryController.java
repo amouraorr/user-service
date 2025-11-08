@@ -16,7 +16,7 @@ import java.util.stream.Collectors;
  * Endpoints para consulta de usuários por outros serviços (ex.: Parcel Service).
  * Rotas em /api/internal/users para deixar claro o uso interno/síncrono.
  */
-@Tag(name = "User", description = "Endpoints para consulta de usuários por outros serviços")
+@Tag(name = "User", description = "Endpoints para consulta de usuários")
 @RestController
 @RequestMapping("/api/internal/users")
 public class UserQueryController {
