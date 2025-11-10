@@ -92,7 +92,7 @@ public class SecurityConfigDocker {
     public JwtDecoder jwtDecoder(@Value("${security.jwt.secret:}") String jwtSecretBase64) {
         if (jwtSecretBase64 == null || jwtSecretBase64.isBlank()) {
             logger.warn("security.jwt.secret não definido; JwtDecoder retornará erro ao decodificar tokens.");
-            return token -> { 
+            return token -> {
                 throw new JwtException("JwtDecoder não configurado para o profile 'docker'. Defina 'security.jwt.secret' para habilitar validação de tokens.");
             };
         }
