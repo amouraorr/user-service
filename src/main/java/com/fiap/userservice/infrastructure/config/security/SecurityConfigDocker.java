@@ -24,17 +24,20 @@ import org.springframework.security.web.SecurityFilterChain;
 import javax.crypto.SecretKey;
 import javax.crypto.spec.SecretKeySpec;
 import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.Base64;
 import java.util.List;
+import java.util.Arrays;
 import java.util.stream.Collectors;
 
 /**
  * Configuração de segurança específica para o profile 'docker' do User Service.
  *
- * Neste arquivo mantemos:
- * - O endpoint de criação de usuário (/api/internal/users/**) aberto para permitir cadastro sem login.
- * - O endpoint de login de teste (/api/internal/auth/login) aberto para gerar tokens via Postman.
- * - Todas as demais rotas exigem autenticação JWT. Rotas específicas são restritas por ROLE.
+ * Ajustes:
+ * - JwtDecoder agora resolve os bytes da chave da mesma forma que o JwtTokenProvider
+ *   (Base64 -> UTF-8 -> SHA-256), evitando falha de validação por chaves inconsistentes.
+ * - JwtAuthenticationConverter aceita tanto 'roles' (lista) quanto 'role' (string) como fonte de authorities.
  */
 @Configuration
 @EnableWebSecurity
@@ -89,8 +92,10 @@ public class SecurityConfigDocker {
 
     /**
      * JwtDecoder HS256 (Nimbus) usando segredo Base64 ou texto simples como fallback.
-     * Aceita tanto 'security.jwt.secret' quanto 'jwt.secret' (prefere security.jwt.secret).
-     * Se a propriedade não for informada, o decoder lançará JwtException.
+     * Consolida a mesma lógica de derivação de bytes da chave usada no JwtTokenProvider:
+     *  - tenta Base64 (se >= 32 bytes)
+     *  - senão usa bytes UTF-8 (se >= 32 bytes)
+     *  - senão deriva 32 bytes via SHA-256 do texto
      */
     @Bean
     public JwtDecoder jwtDecoder(@Value("${security.jwt.secret:${jwt.secret:}}") String jwtSecret) {
@@ -101,15 +106,9 @@ public class SecurityConfigDocker {
             };
         }
 
-        byte[] keyBytes;
-        try {
-            keyBytes = Base64.getDecoder().decode(jwtSecret);
-            logger.info("JwtDecoder configurado com segredo fornecido como Base64 ({} bytes).", keyBytes.length);
-        } catch (IllegalArgumentException ex) {
-            keyBytes = jwtSecret.getBytes(StandardCharsets.UTF_8);
-            logger.warn("Propriedade 'security.jwt.secret'/'jwt.secret' não é um Base64 válido; usando bytes UTF-8 do valor fornecido ({} bytes).", keyBytes.length);
-        }
+        byte[] keyBytes = resolveKeyBytes(jwtSecret);
 
+        logger.info("JwtDecoder configurado com {} bytes de chave para HMAC.", keyBytes.length);
         SecretKey secretKey = new SecretKeySpec(keyBytes, "HmacSHA256");
         return NimbusJwtDecoder.withSecretKey(secretKey)
                 .macAlgorithm(MacAlgorithm.HS256)
@@ -118,14 +117,29 @@ public class SecurityConfigDocker {
 
     /**
      * Converte claim 'roles' em GrantedAuthority com prefixo ROLE_.
+     * Também aceita claim 'role' que pode ser string única ou lista em string separada por vírgula.
      */
     private JwtAuthenticationConverter jwtAuthenticationConverter() {
         JwtAuthenticationConverter conv = new JwtAuthenticationConverter();
         conv.setJwtGrantedAuthoritiesConverter((Jwt jwt) -> {
             List<String> roles = jwt.getClaimAsStringList("roles");
-            if (roles == null) {
+
+            if (roles == null || roles.isEmpty()) {
+                // fallback: claim 'role' pode ser string única ou texto "A,B"
+                Object roleObj = jwt.getClaims().get("role");
+                if (roleObj instanceof String) {
+                    String roleStr = (String) roleObj;
+                    roles = Arrays.stream(roleStr.split(","))
+                            .map(String::trim)
+                            .filter(s -> !s.isEmpty())
+                            .collect(Collectors.toList());
+                }
+            }
+
+            if (roles == null || roles.isEmpty()) {
                 return List.of();
             }
+
             return roles.stream()
                     .map(r -> "ROLE_" + r)
                     .map(org.springframework.security.core.authority.SimpleGrantedAuthority::new)
@@ -137,5 +151,39 @@ public class SecurityConfigDocker {
     @Bean
     public PasswordEncoder passwordEncoder() {
         return new BCryptPasswordEncoder();
+    }
+
+    /**
+     * Resolve bytes para a chave HMAC:
+     * - Tenta decodificar Base64; se resultar em >= 32 bytes, usa esse valor.
+     * - Caso contrário, usa os bytes UTF-8 do texto; se tiver >= 32 bytes, usa diretamente.
+     * - Caso contrário, aplica SHA-256 no texto para obter 32 bytes.
+     *
+     * (mesma lógica do JwtTokenProvider para compatibilidade)
+     */
+    private byte[] resolveKeyBytes(String secret) {
+        // tenta decodificar Base64
+        try {
+            byte[] decoded = Base64.getDecoder().decode(secret);
+            if (decoded.length >= 32) {
+                return decoded;
+            }
+        } catch (IllegalArgumentException ignored) {
+            // não era Base64 -> prosseguir
+        }
+
+        // usa bytes UTF-8
+        byte[] raw = secret.getBytes(StandardCharsets.UTF_8);
+        if (raw.length >= 32) {
+            return raw;
+        }
+
+        // derivar 32 bytes via SHA-256
+        try {
+            MessageDigest md = MessageDigest.getInstance("SHA-256");
+            return md.digest(raw); // 32 bytes
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException("SHA-256 algorithm not available to derive JWT key bytes", e);
+        }
     }
 }
