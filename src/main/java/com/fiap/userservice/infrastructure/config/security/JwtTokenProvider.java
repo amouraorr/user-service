@@ -2,6 +2,9 @@ package com.fiap.userservice.infrastructure.config.security;
 
 import io.jsonwebtoken.*;
 import io.jsonwebtoken.security.Keys;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.core.env.Environment;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
@@ -11,6 +14,9 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.Base64;
 import java.util.Date;
+import java.util.Arrays;
+import java.util.UUID;
+import java.util.List;
 
 /**
  * Gera e valida tokens JWT.
@@ -18,24 +24,36 @@ import java.util.Date;
  * Ajustado para aceitar tanto secrets em Base64 quanto plain-text (útil em ambiente local/docker).
  * Se o valor fornecido não for Base64 válido com pelo menos 32 bytes, derivamos 32 bytes via SHA-256
  * a partir do texto fornecido para garantir comprimento mínimo para HS256.
+ *
  */
 @Component
 public class JwtTokenProvider {
+
+    private static final Logger log = LoggerFactory.getLogger(JwtTokenProvider.class);
 
     private final Key key;
     private final long validityInMilliseconds;
 
     /**
-     * Construtor: aceita segredo em Base64 ou plain-text.
-     *
-     * @param secret                    segredo fornecido via propriedade jwt.secret (pode ser Base64 ou texto simples)
-     * @param validityInMilliseconds    tempo de validade em ms
+     * Construtor: lê preferencialmente 'security.jwt.secret' e usa 'jwt.secret' como fallback.
+     * Exemplo de placeholder Spring usado: ${security.jwt.secret:${jwt.secret:}}
      */
-    public JwtTokenProvider(@Value("${jwt.secret}") String secret,
-                            @Value("${jwt.expiration-ms}") long validityInMilliseconds) {
+    public JwtTokenProvider(@Value("${security.jwt.secret:${jwt.secret:}}") String secret,
+                            @Value("${jwt.expiration-ms:3600000}") long validityInMilliseconds,
+                            Environment env) {
+
+        boolean prodActive = Arrays.asList(env.getActiveProfiles()).contains("prod");
+
+        if ((secret == null || secret.isBlank()) && prodActive) {
+            // Em prod: exigimos explicitamente a propriedade
+            throw new IllegalArgumentException("jwt.secret or security.jwt.secret must be provided (Base64 or plain text) when profile 'prod' is active");
+        }
 
         if (secret == null || secret.isBlank()) {
-            throw new IllegalArgumentException("jwt.secret must be provided (Base64 or plain text)");
+            // Ambiente não-prod: gerar um secret derivado e logar WARN
+            String fallback = "fiap-default-secret-" + UUID.randomUUID();
+            log.warn("Property 'security.jwt.secret' or 'jwt.secret' is not set and profile 'prod' is NOT active. Using an auto-generated secret for development. Do NOT use this in production.");
+            secret = fallback;
         }
 
         byte[] keyBytes = resolveKeyBytes(secret);
@@ -78,17 +96,25 @@ public class JwtTokenProvider {
 
     /**
      * Cria um token JWT assinado com HS256.
+     * Alteração: além do claim "role" (string), também adiciona o claim "roles" (lista) para compatibilidade
+     * com conversores que esperam a claim plural.
      */
     public String createToken(String username, String role) {
         Date now = new Date();
         Date expiry = new Date(now.getTime() + validityInMilliseconds);
-        return Jwts.builder()
+        JwtBuilder builder = Jwts.builder()
                 .setSubject(username)
                 .claim("role", role)
                 .setIssuedAt(now)
                 .setExpiration(expiry)
-                .signWith(key, SignatureAlgorithm.HS256)
-                .compact();
+                .signWith(key, SignatureAlgorithm.HS256);
+
+        // Adiciona também 'roles' como lista para que o JwtAuthenticationConverter dos serviços encontre as roles.
+        if (role != null) {
+            builder.claim("roles", List.of(role));
+        }
+
+        return builder.compact();
     }
 
     /**
@@ -113,10 +139,28 @@ public class JwtTokenProvider {
 
     /**
      * Extrai o claim "role" do token (se presente).
+     *  - claim "role" (string)
+     *  - claim "roles" (lista) e retorna o primeiro elemento
      */
     public String getRole(String token) {
         Claims claims = Jwts.parserBuilder().setSigningKey(key).build().parseClaimsJws(token).getBody();
-        Object role = claims.get("role");
-        return role != null ? role.toString() : null;
+
+        Object roleObj = claims.get("role");
+        if (roleObj != null) {
+            return roleObj.toString();
+        }
+
+        Object rolesObj = claims.get("roles");
+        if (rolesObj instanceof java.util.List) {
+            java.util.List<?> rolesList = (java.util.List<?>) rolesObj;
+            if (!rolesList.isEmpty() && rolesList.get(0) != null) {
+                return rolesList.get(0).toString();
+            }
+        } else if (rolesObj != null) {
+            // se for string com vírgula ou similar, tentar retornar diretamente
+            return rolesObj.toString();
+        }
+
+        return null;
     }
 }

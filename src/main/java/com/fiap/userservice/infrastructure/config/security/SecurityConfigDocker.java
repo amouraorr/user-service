@@ -31,9 +31,10 @@ import java.util.stream.Collectors;
 /**
  * Configuração de segurança específica para o profile 'docker' do User Service.
  *
- * ATENÇÃO: Este arquivo relaxa a segurança (permitAll / comentário do oauth2ResourceServer)
- * para permitir testes locais via docker-compose. Em produção remova este profile e
- * reative a validação JWT.
+ * Neste arquivo mantemos:
+ * - O endpoint de criação de usuário (/api/internal/users/**) aberto para permitir cadastro sem login.
+ * - O endpoint de login de teste (/api/internal/auth/login) aberto para gerar tokens via Postman.
+ * - Todas as demais rotas exigem autenticação JWT. Rotas específicas são restritas por ROLE.
  */
 @Configuration
 @EnableWebSecurity
@@ -43,69 +44,70 @@ public class SecurityConfigDocker {
 
     private static final Logger logger = LoggerFactory.getLogger(SecurityConfigDocker.class);
 
-    /**
-     * SecurityFilterChain para ambiente docker: libera endpoints de criação de usuários
-     * (incluindo porteiro) e, por conveniência de testes locais, libera todas as requisições.
-     *
-     * Para reativar segurança, restaure as regras comentadas e remova o profile 'docker'.
-     */
     @Bean
     @Order(1)
     public SecurityFilterChain userServiceSecurityFilterChainDocker(HttpSecurity http) throws Exception {
         logger.info("Registrando SecurityFilterChain para profile 'docker' com ordem=1 (ambiente de testes).");
 
         // Importante: definimos explicitamente um securityMatcher com padrão Ant ("/**").
-        // Isso evita registrar um filter chain com AnyRequestMatcher (que causaria conflito
-        // caso outra configuração também utilize anyRequest()). O validator do Spring Security
-        // só considera "any request" como conflitante — usando um Ant matcher diferenciam-se os matchers.
         http.securityMatcher("/**");
 
         http
-                // Desabilitamos CSRF para APIs stateless em testes locais
                 .csrf(csrf -> csrf.disable())
                 .authorizeHttpRequests(auth -> auth
-                        // Permite explicitamente criação de usuários internos (ex.: porteiro)
+                        // Permitir Swagger / OpenAPI / recursos estáticos
+                        .requestMatchers(HttpMethod.GET,
+                                "/swagger-ui.html",
+                                "/swagger-ui/**",
+                                "/swagger-ui/index.html",
+                                "/v3/api-docs/**",
+                                "/api-doc/**",
+                                "/webjars/**",
+                                "/favicon.ico").permitAll()
+
+                        // Opcional: expor health/info sem autenticação
+                        .requestMatchers(HttpMethod.GET, "/actuator/health", "/actuator/info").permitAll()
+
+                        // Permite criação de usuários (morador/porteiro) sem autenticação
                         .requestMatchers(HttpMethod.POST, "/api/internal/users/**").permitAll()
-                        // Permite endpoint de login interno caso exista (ajuste conforme seu endpoint real)
+                        // Permitir endpoint de login interno para geração de tokens (apenas para dev)
                         .requestMatchers(HttpMethod.POST, "/api/internal/auth/login").permitAll()
-                        // Para facilitar testes locais via docker, liberamos TODAS as requisições.
-                        // Em produção, substitua por regras mais restritas e reative oauth2ResourceServer.
-                        .anyRequest().permitAll()
+
+                        // Endpoints que só o porteiro pode executar
+                        .requestMatchers(HttpMethod.POST, "/api/parcels").hasRole("PORTEIRO")
+                        .requestMatchers(HttpMethod.POST, "/api/parcels/*/pickup").hasRole("PORTEIRO")
+                        .requestMatchers(HttpMethod.POST, "/api/parcels/*/confirm").hasRole("MORADOR")
+
+                        // Qualquer outra requisição requer autenticação
+                        .anyRequest().authenticated()
+                )
+                .oauth2ResourceServer(oauth2 -> oauth2
+                        .jwt(jwt -> jwt.jwtAuthenticationConverter(jwtAuthenticationConverter()))
                 );
-
-        // Comentado para testes docker: validação JWT reativar em produção.
-        /*
-        http.oauth2ResourceServer(oauth2 -> oauth2
-                .jwt(jwt -> jwt.jwtAuthenticationConverter(jwtAuthenticationConverter()))
-        );
-        */
-
         return http.build();
     }
 
     /**
      * JwtDecoder HS256 (Nimbus) usando segredo Base64 ou texto simples como fallback.
-     * Se a propriedade 'security.jwt.secret' não for informada, este bean retornará um decoder
-     * que lança JwtException ao tentar decodificar, evitando comportamento silencioso.
+     * Aceita tanto 'security.jwt.secret' quanto 'jwt.secret' (prefere security.jwt.secret).
+     * Se a propriedade não for informada, o decoder lançará JwtException.
      */
     @Bean
-    public JwtDecoder jwtDecoder(@Value("${security.jwt.secret:}") String jwtSecretBase64) {
-        if (jwtSecretBase64 == null || jwtSecretBase64.isBlank()) {
-            logger.warn("security.jwt.secret não definido; JwtDecoder retornará erro ao decodificar tokens.");
+    public JwtDecoder jwtDecoder(@Value("${security.jwt.secret:${jwt.secret:}}") String jwtSecret) {
+        if (jwtSecret == null || jwtSecret.isBlank()) {
+            logger.warn("security.jwt.secret / jwt.secret não definidos; JwtDecoder retornará erro ao decodificar tokens.");
             return token -> {
-                throw new JwtException("JwtDecoder não configurado para o profile 'docker'. Defina 'security.jwt.secret' para habilitar validação de tokens.");
+                throw new JwtException("JwtDecoder não configurado para o profile 'docker'. Defina 'security.jwt.secret' ou 'jwt.secret' para habilitar validação de tokens.");
             };
         }
 
         byte[] keyBytes;
         try {
-            // tenta interpretar como Base64
-            keyBytes = Base64.getDecoder().decode(jwtSecretBase64);
+            keyBytes = Base64.getDecoder().decode(jwtSecret);
             logger.info("JwtDecoder configurado com segredo fornecido como Base64 ({} bytes).", keyBytes.length);
         } catch (IllegalArgumentException ex) {
-            // fallback para UTF-8
-            keyBytes = jwtSecretBase64.getBytes(StandardCharsets.UTF_8);
-            logger.warn("Propriedade 'security.jwt.secret' não é um Base64 válido; usando bytes UTF-8 do valor fornecido ({} bytes).", keyBytes.length);
+            keyBytes = jwtSecret.getBytes(StandardCharsets.UTF_8);
+            logger.warn("Propriedade 'security.jwt.secret'/'jwt.secret' não é um Base64 válido; usando bytes UTF-8 do valor fornecido ({} bytes).", keyBytes.length);
         }
 
         SecretKey secretKey = new SecretKeySpec(keyBytes, "HmacSHA256");
@@ -115,7 +117,7 @@ public class SecurityConfigDocker {
     }
 
     /**
-     * Converte claim 'roles' em GrantedAuthority com prefixo ROLE_ (mantido para reativação futura).
+     * Converte claim 'roles' em GrantedAuthority com prefixo ROLE_.
      */
     private JwtAuthenticationConverter jwtAuthenticationConverter() {
         JwtAuthenticationConverter conv = new JwtAuthenticationConverter();
