@@ -33,11 +33,6 @@ import java.util.stream.Collectors;
 
 /**
  * Configuração de segurança específica para o profile 'docker' do User Service.
- *
- * Ajustes:
- * - JwtDecoder agora resolve os bytes da chave da mesma forma que o JwtTokenProvider
- *   (Base64 -> UTF-8 -> SHA-256), evitando falha de validação por chaves inconsistentes.
- * - JwtAuthenticationConverter aceita tanto 'roles' (lista) quanto 'role' (string) como fonte de authorities.
  */
 @Configuration
 @EnableWebSecurity
@@ -52,13 +47,12 @@ public class SecurityConfigDocker {
     public SecurityFilterChain userServiceSecurityFilterChainDocker(HttpSecurity http) throws Exception {
         logger.info("Registrando SecurityFilterChain para profile 'docker' com ordem=1 (ambiente de testes).");
 
-        // Importante: definimos explicitamente um securityMatcher com padrão Ant ("/**").
         http.securityMatcher("/**");
 
         http
                 .csrf(csrf -> csrf.disable())
                 .authorizeHttpRequests(auth -> auth
-                        // Permitir Swagger / OpenAPI / recursos estáticos
+
                         .requestMatchers(HttpMethod.GET,
                                 "/swagger-ui.html",
                                 "/swagger-ui/**",
@@ -68,20 +62,13 @@ public class SecurityConfigDocker {
                                 "/webjars/**",
                                 "/favicon.ico").permitAll()
 
-                        // Opcional: expor health/info sem autenticação
+
                         .requestMatchers(HttpMethod.GET, "/actuator/health", "/actuator/info").permitAll()
-
-                        // Permite criação de usuários (morador/porteiro) sem autenticação
                         .requestMatchers(HttpMethod.POST, "/api/internal/users/**").permitAll()
-                        // Permitir endpoint de login interno para geração de tokens (apenas para dev)
                         .requestMatchers(HttpMethod.POST, "/api/internal/auth/login").permitAll()
-
-                        // Endpoints que só o porteiro pode executar
                         .requestMatchers(HttpMethod.POST, "/api/parcels").hasRole("PORTEIRO")
                         .requestMatchers(HttpMethod.POST, "/api/parcels/*/pickup").hasRole("PORTEIRO")
                         .requestMatchers(HttpMethod.POST, "/api/parcels/*/confirm").hasRole("MORADOR")
-
-                        // Qualquer outra requisição requer autenticação
                         .anyRequest().authenticated()
                 )
                 .oauth2ResourceServer(oauth2 -> oauth2
@@ -125,7 +112,7 @@ public class SecurityConfigDocker {
             List<String> roles = jwt.getClaimAsStringList("roles");
 
             if (roles == null || roles.isEmpty()) {
-                // fallback: claim 'role' pode ser string única ou texto "A,B"
+
                 Object roleObj = jwt.getClaims().get("role");
                 if (roleObj instanceof String) {
                     String roleStr = (String) roleObj;

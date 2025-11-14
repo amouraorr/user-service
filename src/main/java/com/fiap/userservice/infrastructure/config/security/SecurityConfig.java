@@ -15,8 +15,7 @@ import org.springframework.security.provisioning.InMemoryUserDetailsManager;
 import org.springframework.security.web.SecurityFilterChain;
 
 /**
- * Configuração de segurança para permitir acesso público ao Swagger e definir
- * um usuário em memória para testes (desenvolvimento).
+ * Configuração de segurança para permitir acesso público ao Swagger
  */
 @Configuration
 @Profile("dev")
@@ -28,14 +27,12 @@ public class SecurityConfig {
         http
                 .csrf(csrf -> csrf.disable())
                 .authorizeHttpRequests(auth -> auth
-                        // liberar endpoints públicos
+
                         .requestMatchers("/actuator/**").permitAll()
                         .requestMatchers("/api/internal/auth/login").permitAll()
                         .requestMatchers("/api/internal/users/morador").permitAll()
                         .requestMatchers("/api/internal/users/porteiro").permitAll()
-                        // permitir TODOS os métodos para endpoints de API (GET, POST, etc.)
                         .requestMatchers("/api/**").permitAll()
-                        // qualquer outro request precisa de autenticação
                         .anyRequest().authenticated()
                 )
                 .httpBasic(Customizer.withDefaults())

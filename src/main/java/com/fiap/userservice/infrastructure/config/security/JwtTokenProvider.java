@@ -21,10 +21,6 @@ import java.util.List;
 /**
  * Gera e valida tokens JWT.
  *
- * Ajustado para aceitar tanto secrets em Base64 quanto plain-text (útil em ambiente local/docker).
- * Se o valor fornecido não for Base64 válido com pelo menos 32 bytes, derivamos 32 bytes via SHA-256
- * a partir do texto fornecido para garantir comprimento mínimo para HS256.
- *
  */
 @Component
 public class JwtTokenProvider {
@@ -34,10 +30,6 @@ public class JwtTokenProvider {
     private final Key key;
     private final long validityInMilliseconds;
 
-    /**
-     * Construtor: lê preferencialmente 'security.jwt.secret' e usa 'jwt.secret' como fallback.
-     * Exemplo de placeholder Spring usado: ${security.jwt.secret:${jwt.secret:}}
-     */
     public JwtTokenProvider(@Value("${security.jwt.secret:${jwt.secret:}}") String secret,
                             @Value("${jwt.expiration-ms:3600000}") long validityInMilliseconds,
                             Environment env) {
@@ -45,12 +37,12 @@ public class JwtTokenProvider {
         boolean prodActive = Arrays.asList(env.getActiveProfiles()).contains("prod");
 
         if ((secret == null || secret.isBlank()) && prodActive) {
-            // Em prod: exigimos explicitamente a propriedade
+
             throw new IllegalArgumentException("jwt.secret or security.jwt.secret must be provided (Base64 or plain text) when profile 'prod' is active");
         }
 
         if (secret == null || secret.isBlank()) {
-            // Ambiente não-prod: gerar um secret derivado e logar WARN
+
             String fallback = "fiap-default-secret-" + UUID.randomUUID();
             log.warn("Property 'security.jwt.secret' or 'jwt.secret' is not set and profile 'prod' is NOT active. Using an auto-generated secret for development. Do NOT use this in production.");
             secret = fallback;

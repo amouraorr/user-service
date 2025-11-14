@@ -18,12 +18,12 @@ public class GetUserUseCase {
 
     public User findById(UUID id) {
         return repository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("user not found"));
+                .orElseThrow(() -> new IllegalArgumentException("usuário não encontrado"));
     }
 
     public User findByUsername(String username) {
         return repository.findByUsername(username)
-                .orElseThrow(() -> new IllegalArgumentException("user not found"));
+                .orElseThrow(() -> new IllegalArgumentException("usuário não encontrado"));
     }
 
     public List<User> findAll() {

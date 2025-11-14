@@ -35,7 +35,7 @@ public class UpdateUserUseCase {
                         String apartment,
                         String role) {
         User user = repository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("user not found"));
+                .orElseThrow(() -> new IllegalArgumentException("usuário não encontrado"));
 
         if (username != null && !username.trim().isEmpty()) {
             user.setUsername(username);
